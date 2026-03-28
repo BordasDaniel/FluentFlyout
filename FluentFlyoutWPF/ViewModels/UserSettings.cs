@@ -540,7 +540,7 @@ public partial class UserSettings : ObservableObject
         Position = 0;
         FlyoutAnimationSpeed = 2;
         PlayerInfoEnabled = true;
-        MediaAppOpenerEnabled = true;
+        MediaAppOpenerEnabled = false;
         RepeatEnabled = false;
         ShuffleEnabled = false;
         Startup = true;

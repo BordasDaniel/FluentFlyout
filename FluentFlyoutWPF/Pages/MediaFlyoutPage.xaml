@@ -131,7 +131,8 @@
                 </ui:CardControl.Header>
                 <controls:ToggleSwitch Name="CenterTitleArtistSwitch" IsChecked="{Binding CenterTitleArtist, Mode=TwoWay}" />
             </ui:CardControl>
-            <ui:CardControl Grid.Row="9" Icon="{ui:SymbolIcon Subtitles24}" Margin="0,0,0,12">
+            
+            <ui:CardControl Grid.Row="9" Icon="{ui:SymbolIcon Subtitles24}" Margin="0,0,0,3">
                 <ui:CardControl.Header>
                     <StackPanel Orientation="Vertical">
                         <TextBlock Text="{DynamicResource ShowMediaPlayerNameTitle}" FontSize="14" FontWeight="Regular" VerticalAlignment="Center" />
@@ -142,8 +143,9 @@
 
             <ui:CardControl Grid.Row="10" Icon="{ui:SymbolIcon Open24}" Margin="0,0,0,12">
                 <ui:CardControl.Header>
-                    <StackPanel Orientation="Vertical">
+                    <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{DynamicResource AppOpenerTitle}" FontSize="14" FontWeight="Regular" VerticalAlignment="Center" />
+                        <ui:InfoBadge Value=" NEW " FontWeight="Medium" FontSize="10" Margin="6,-2,0,-2" Severity="Success" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <controls:ToggleSwitch Name="AppOpenerSwitch" IsChecked="{Binding MediaAppOpenerEnabled, Mode=TwoWay}" />
