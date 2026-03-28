@@ -13,6 +13,7 @@ using FluentFlyoutWPF.Windows;
 using MicaWPF.Controls;
 using MicaWPF.Core.Extensions;
 using Microsoft.Win32;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -28,6 +29,7 @@ using Windows.Media.Control;
 using static FluentFlyout.Classes.NativeMethods;
 using static FluentFlyoutWPF.Classes.Utils.MonitorUtil;
 using static WindowsMediaController.MediaManager;
+using LicenseManager = FluentFlyout.Classes.LicenseManager;
 
 
 namespace FluentFlyoutWPF;
@@ -1095,6 +1097,89 @@ public partial class MainWindow : MicaWindow
             return;
 
         await mediaManager.GetFocusedSession().ControlSession.TrySkipPreviousAsync();
+    }
+
+    private bool TryActivateRunningMediaApp(string appId)
+    {
+        if (string.IsNullOrWhiteSpace(appId)) return false;
+
+        string[] variants = appId
+            .Split('.')
+            .Select(variant =>
+                variant.Replace("com", "", StringComparison.OrdinalIgnoreCase)
+                       .Replace("github", "", StringComparison.OrdinalIgnoreCase)
+                       .Replace("exe", "", StringComparison.OrdinalIgnoreCase)
+                       .Trim()
+            )
+            .Where(variant => !string.IsNullOrWhiteSpace(variant))
+            .ToArray();
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.MainWindowHandle == IntPtr.Zero)
+                    continue;
+
+                var mainModule = process.MainModule;
+                if (mainModule == null)
+                    continue;
+
+                string path = mainModule.FileName;
+                if (!variants.Any(v => path.Contains(v, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                int showState = IsIconic(process.MainWindowHandle) ? SW_RESTORE : SW_SHOW;
+                ShowWindowAsync(process.MainWindowHandle, showState);
+                SetForegroundWindow(process.MainWindowHandle);
+                return true;
+            }
+            catch (Win32Exception)
+            {
+                // ignore inaccessible processes
+            }
+            catch (InvalidOperationException)
+            {
+                // process exited between enumeration and access
+            }
+        }
+
+        return false;
+    }
+
+    private void SongImageBorder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        // It opens the media app when clicking the album art, but only if the session supports it. This is determined by checking if the session supports the "Open" command, which is a common way for media sessions to indicate that they can open the associated media in an app.
+        if (mediaManager.GetFocusedSession() is not { } focusedSession) return;
+
+        string appId = focusedSession.ControlSession.SourceAppUserModelId;
+        if (string.IsNullOrWhiteSpace(appId))
+            appId = focusedSession.Id;
+
+        try
+        {
+            bool opened = TryActivateRunningMediaApp(appId);
+
+            if (!opened)
+            {
+                Process.Start("explorer.exe", $@"shell:AppsFolder\{appId}");
+                opened = true;
+            }
+
+            if (opened)
+            {
+                ShowMediaFlyout(toggleMode: true);
+            }
+
+        }
+        catch (Win32Exception ex)
+        {
+            Logger.Error(ex, "Failed to open media app");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Not handled issue");
+        }
     }
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)

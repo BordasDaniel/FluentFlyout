@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -9,6 +10,12 @@ namespace FluentFlyout.Classes.Utils;
 
 public static class MediaPlayerData
 {
+    private static readonly HashSet<string> NonInformativeWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "com", "org", "net", "io", "app", "apps", "github", "exe", "microsoft", "windows"
+    };
+
+
     private class CachedMediaPlayerInfo
     {
         public string Title { get; set; }
@@ -20,6 +27,32 @@ public static class MediaPlayerData
     private static Process[] cachedProcesses = null;
     private static DateTime lastCacheTime = DateTime.MinValue;
     private const int CACHE_DURATION_SECONDS = 5;
+
+    private static string NormalizeForMatch(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return new string(value
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+    }
+
+    private static string CreateFriendlyTitle(string mediaPlayerId)
+    {
+        var parts = mediaPlayerId
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Replace('-', ' ').Replace('_', ' ').Trim())
+            .Where(part => !string.IsNullOrWhiteSpace(part) && !NonInformativeWords.Contains(part))
+            .ToList();
+
+        if (parts.Count == 0)
+            return mediaPlayerId;
+
+        string selected = parts.OrderByDescending(p => p.Length).First();
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(selected.ToLowerInvariant());
+    }
 
     public static (string, ImageSource) getMediaPlayerData(string mediaPlayerId)
     {
@@ -56,6 +89,11 @@ public static class MediaPlayerData
 
         processes = cachedProcesses;
 
+        string friendlyFallbackTitle = CreateFriendlyTitle(mediaPlayerId);
+        var normalizedVariants = variants.Select(NormalizeForMatch)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToList();
+
         var processData = processes.Select(p =>
             {
                 try
@@ -71,16 +109,40 @@ public static class MediaPlayerData
 
                     string path = mainModule.FileName;
 
-                    if (variants.Any(v => path.Contains(v, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        // prioritize the FileDescription for a user-friendly name
-                        // fall back to MainWindowTitle if the description is empty
-                        string title = !string.IsNullOrWhiteSpace(mainModule.FileVersionInfo.FileDescription)
-                                        ? mainModule.FileVersionInfo.FileDescription
-                                        : p.MainWindowTitle;
+                    string normalizedPath = NormalizeForMatch(path);
+                    string normalizedProcessName = NormalizeForMatch(p.ProcessName);
+                    string normalizedWindowTitle = NormalizeForMatch(p.MainWindowTitle);
+                    int score = 0;
+                    bool windowTitleMatch = false;
 
-                        return new { Title = title, Path = path };
+                    foreach (var normalizedVariant in normalizedVariants)
+                    {
+                        if (normalizedWindowTitle.Contains(normalizedVariant))
+                            windowTitleMatch = true;
+
+                        if (normalizedProcessName.Contains(normalizedVariant))
+                            score += 2;
+                        if (normalizedPath.Contains(normalizedVariant))
+                            score += 1;
                     }
+
+                    if (score == 0 && !windowTitleMatch)
+                        return null;
+
+                    string fileDescription = mainModule.FileVersionInfo.FileDescription;
+                    string title = !string.IsNullOrWhiteSpace(fileDescription)
+                        ? fileDescription
+                        : p.MainWindowTitle;
+
+                    // Browser-hosted/PWA players often only match by window title.
+                    // In that case keep friendly player name, but still use host process icon.
+                    if (score == 0 && windowTitleMatch)
+                        title = friendlyFallbackTitle;
+
+                    if (string.IsNullOrWhiteSpace(title))
+                        title = friendlyFallbackTitle;
+
+                    return new { Title = title, Path = path, Score = score };
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
@@ -88,7 +150,9 @@ public static class MediaPlayerData
                 }
                 return null;
             })
-            .FirstOrDefault(data => data != null); // use first result
+            .Where(data => data != null)
+            .OrderByDescending(data => data!.Score)
+            .FirstOrDefault(); // use best scored result
 
         if (processData != null)
         {
@@ -113,6 +177,10 @@ public static class MediaPlayerData
             {
                 mediaIcon = null;
             }
+        }
+        else
+        {
+            mediaTitle = friendlyFallbackTitle;
         }
 
         mediaPlayerCache[mediaPlayerId] = new CachedMediaPlayerInfo
