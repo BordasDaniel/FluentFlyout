@@ -168,12 +168,14 @@ public partial class MainWindow : MicaWindow
         mediaManager.OnAnyPlaybackStateChanged += CurrentSession_OnPlaybackStateChanged;
         mediaManager.OnAnyTimelinePropertyChanged += MediaManager_OnAnyTimelinePropertyChanged;
         mediaManager.OnAnySessionClosed += MediaManager_OnAnySessionClosed;
+        SettingsManager.Current.PropertyChanged += Settings_Current_PropertyChanged;
 
         WM_TASKBARCREATED = RegisterWindowMessage("TaskbarCreated");
         WM_SHELLHOOK = RegisterWindowMessage("SHELLHOOK");
         RegisterShellHookWindow(new WindowInteropHelper(this).Handle);
 
         _positionTimer = new Timer(SeekbarUpdateUi, null, Timeout.Infinite, Timeout.Infinite);
+        UpdateSongImageInteractivity();
         if (_seekBarEnabled && mediaManager.GetFocusedSession() is { } session)
         {
             UpdateSeekbarCurrentDuration(session.ControlSession.GetTimelineProperties().Position);
@@ -821,6 +823,19 @@ public partial class MainWindow : MicaWindow
         ControlClose.Visibility = SettingsManager.Current.MediaFlyoutAlwaysDisplay && SettingsManager.Current.CompactLayout ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void Settings_Current_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UserSettings.MediaAppOpenerEnabled))
+        {
+            Dispatcher.Invoke(UpdateSongImageInteractivity);
+        }
+    }
+
+    private void UpdateSongImageInteractivity()
+    {
+        SongImageBorder.Cursor = SettingsManager.Current.MediaAppOpenerEnabled ? Cursors.Hand : Cursors.Arrow;
+    }
+
     private void UpdateUI(MediaSession mediaSession)
     {
         if (_layout != SettingsManager.Current.CompactLayout ||
@@ -1149,7 +1164,8 @@ public partial class MainWindow : MicaWindow
 
     private void SongImageBorder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        // It opens the media app when clicking the album art, but only if the session supports it. This is determined by checking if the session supports the "Open" command, which is a common way for media sessions to indicate that they can open the associated media in an app.
+        // It opens the media app when clicking the album art, but only if the session supports it.
+        if (!SettingsManager.Current.MediaAppOpenerEnabled) return;
         if (mediaManager.GetFocusedSession() is not { } focusedSession) return;
 
         string appId = focusedSession.ControlSession.SourceAppUserModelId;
@@ -1355,6 +1371,7 @@ public partial class MainWindow : MicaWindow
             mediaManager.OnAnyPlaybackStateChanged -= CurrentSession_OnPlaybackStateChanged;
             mediaManager.OnAnyTimelinePropertyChanged -= MediaManager_OnAnyTimelinePropertyChanged;
             mediaManager.OnAnySessionClosed -= MediaManager_OnAnySessionClosed;
+            SettingsManager.Current.PropertyChanged -= Settings_Current_PropertyChanged;
 
             // dispose managed resources
             _positionTimer?.Change(Timeout.Infinite, Timeout.Infinite);

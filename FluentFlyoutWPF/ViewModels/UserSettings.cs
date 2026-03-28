@@ -50,6 +50,16 @@ public partial class UserSettings : ObservableObject
     public partial bool PlayerInfoEnabled { get; set; }
 
     /// <summary>
+    /// Enable opening the media app when clicking album art
+    /// </summary>
+    private bool _mediaAppOpenerEnabled;
+    public bool MediaAppOpenerEnabled
+    {
+        get => _mediaAppOpenerEnabled;
+        set => SetProperty(ref _mediaAppOpenerEnabled, value);
+    }
+
+    /// <summary>
     /// Enable repeat button
     /// </summary>
     [ObservableProperty]
@@ -530,6 +540,7 @@ public partial class UserSettings : ObservableObject
         Position = 0;
         FlyoutAnimationSpeed = 2;
         PlayerInfoEnabled = true;
+        MediaAppOpenerEnabled = true;
         RepeatEnabled = false;
         ShuffleEnabled = false;
         Startup = true;
